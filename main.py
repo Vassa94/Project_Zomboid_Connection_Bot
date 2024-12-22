@@ -197,11 +197,31 @@ async def process_logs(processed_lines, timestamps):
         print(f"Error al decodificar el archivo: {e}")
     return processed_lines, timestamps
 
+def initialize_processed_logs_with_timestamps():
+    """
+    Actualizar el archivo processed_logs.txt agregando marcas de tiempo actuales.
+    """
+    try:
+        with open(PROCESSED_LOG_FILE, 'r') as file:
+            lines = file.readlines()
+
+        with open(PROCESSED_LOG_FILE, 'w') as file:
+            current_time = datetime.datetime.now().isoformat()  # Tiempo actual
+            for line in lines:
+                hash_ = line.strip()
+                file.write(f"{hash_},{current_time}\n")
+        print("Archivo processed_logs.txt actualizado con marcas de tiempo.")
+    except FileNotFoundError:
+        print("El archivo processed_logs.txt no existe, creando uno vacío.")
+        with open(PROCESSED_LOG_FILE, 'w') as file:
+            pass  # Crear un archivo vacío si no existe
 
 async def main():
     """
     Bucle principal para descargar y procesar los logs periódicamente.
     """
+    initialize_processed_logs_with_timestamps()
+
     processed_lines, timestamps = load_processed_lines()  # Cargar líneas procesadas desde el archivo
     while True:
         download_logs()
