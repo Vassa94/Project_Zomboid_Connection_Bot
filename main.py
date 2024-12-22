@@ -43,47 +43,12 @@ def load_processed_lines():
 
 def save_processed_line(line_hash, timestamps):
     """
-    Guardar las líneas procesadas en el archivo de registro.
+    Guardar las líneas procesadas en el archivo de registro con sus marcas de tiempo.
     """
     with open(PROCESSED_LOG_FILE, 'w') as file:
         for hash_, timestamp in timestamps.items():
+            file.write(f"{hash_},{timestamp.isoformat()}\n")
 
-            def clean_old_processed_lines(processed_lines, timestamps, hours=2):
-                """
-                Limpiar líneas procesadas que tienen más de `hours` horas.
-                """
-                cutoff_time = datetime.datetime.now() - datetime.timedelta(hours=hours)
-                hashes_to_remove = {hash_ for hash_, timestamp in timestamps.items() if timestamp < cutoff_time}
-                for hash_ in hashes_to_remove:
-                    processed_lines.remove(hash_)
-                    del timestamps[hash_]
-
-            def clean_old_logs(log_file, hours=2):
-                """
-                Eliminar líneas de logs más antiguas de `hours` horas.
-                """
-                cutoff_time = datetime.datetime.now() - datetime.timedelta(hours=hours)
-                try:
-                    with open(log_file, 'r', encoding='utf-8') as file:
-                        lines = file.readlines()
-
-                    recent_lines = []
-                    for line in lines:
-                        # Filtrar líneas recientes basadas en marcas de tiempo en el log
-                        parts = line.split('>')
-                        if len(parts) > 1:
-                            try:
-                                timestamp_str = parts[1].split('[')[1].split(']')[0]
-                                log_time = datetime.datetime.strptime(timestamp_str, "%y-%m-%d %H:%M:%S.%f")
-                                if log_time >= cutoff_time:
-                                    recent_lines.append(line)
-                            except (IndexError, ValueError):
-                                recent_lines.append(line)  # Si no se puede parsear, asumimos que es reciente
-
-                    with open(log_file, 'w', encoding='utf-8') as file:
-                        file.writelines(recent_lines)
-                except FileNotFoundError:
-                    print(f"{log_file} no encontrado. No se realizó ninguna limpieza.")
 
 
 def clean_old_processed_lines(processed_lines, timestamps, hours=2):
