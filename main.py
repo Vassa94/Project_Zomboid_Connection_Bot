@@ -133,23 +133,40 @@ async def process_logs(processed_lines, timestamps):
         with open(LOCAL_LOG_COPY, 'r', encoding='utf-8') as file:  # Forzar UTF-8
             lines = file.readlines()
 
-        # Filtrar líneas nuevas por hash
+        # Filtrar nuevas líneas por hash
         new_lines = [line for line in lines if calculate_line_hash(line) not in processed_lines]
         cutoff_time = datetime.datetime.now() - datetime.timedelta(minutes=10)
 
-        for line in new_lines:
-            # Extraer la marca de tiempo del log
+        # Mantener la última marca de tiempo válida encontrada
+        last_timestamp = None
+        for i, line in enumerate(new_lines):
+            # Intentar extraer la marca de tiempo del log
             log_time = None
             try:
                 # Buscar la marca de tiempo en el formato [yy-mm-dd HH:MM:SS.fff]
                 if "[" in line and "]" in line:
                     timestamp_str = line.split('[')[1].split(']')[0]
                     log_time = datetime.datetime.strptime(timestamp_str, "%y-%m-%d %H:%M:%S.%f")
+                    last_timestamp = log_time  # Actualizar la última marca de tiempo válida
                 else:
-                    continue  # Ignorar si no se encuentra el timestamp
+                    # Si no hay marca de tiempo explícita, calcular un timestamp intermedio
+                    next_timestamp = None
+                    for future_line in new_lines[i + 1:]:
+                        if "[" in future_line and "]" in future_line:
+                            timestamp_str = future_line.split('[')[1].split(']')[0]
+                            next_timestamp = datetime.datetime.strptime(timestamp_str, "%y-%m-%d %H:%M:%S.%f")
+                            break
+
+                    if last_timestamp and next_timestamp:
+                        log_time = last_timestamp + (next_timestamp - last_timestamp) / 2
+                    elif last_timestamp:
+                        log_time = last_timestamp  # Usar la última marca de tiempo válida
+                    else:
+                        print(f"No se pudo calcular el timestamp para la línea: {line.strip()}")
+                        continue
             except (IndexError, ValueError):
                 print(f"Error al analizar la marca de tiempo de la línea: {line.strip()}")
-                continue  # Saltar líneas con marcas de tiempo mal formadas
+                continue
 
             # Ignorar logs antiguos (más de 10 minutos)
             if log_time < cutoff_time:
@@ -163,7 +180,7 @@ async def process_logs(processed_lines, timestamps):
                 print(f"👋 ¡{player_name} se ha conectado al servidor!")
                 line_hash = calculate_line_hash(line)
                 processed_lines.add(line_hash)
-                timestamps[line_hash] = datetime.datetime.now()
+                timestamps[line_hash] = log_time
                 save_processed_line(line_hash, timestamps)  # Guardar en el registro persistente
                 await send_discord_message(player_name, "connected")
 
@@ -175,7 +192,7 @@ async def process_logs(processed_lines, timestamps):
                     print(f"👋 ¡{player_name} se ha desconectado del servidor!")
                     line_hash = calculate_line_hash(line)
                     processed_lines.add(line_hash)
-                    timestamps[line_hash] = datetime.datetime.now()
+                    timestamps[line_hash] = log_time
                     save_processed_line(line_hash, timestamps)  # Guardar en el registro persistente
                     await send_discord_message(player_name, "disconnected")
     except FileNotFoundError:
@@ -183,6 +200,7 @@ async def process_logs(processed_lines, timestamps):
     except UnicodeDecodeError as e:
         print(f"Error al decodificar el archivo: {e}")
     return processed_lines, timestamps
+
 
 
 def initialize_processed_logs_with_timestamps():
