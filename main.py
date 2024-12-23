@@ -136,9 +136,11 @@ async def process_logs(processed_lines, timestamps):
         with open(LOCAL_LOG_COPY, 'r', encoding='utf-8') as file:
             lines = file.readlines()
 
-        # Filtrar líneas no procesadas
+        # Filtrar líneas no procesadas y descartar las que comienzan con "WARN : General"
         new_lines = []
         for line in lines:
+            if line.startswith("WARN : General"):
+                continue  # Ignorar estas líneas completamente
             line_hash = calculate_line_hash(line)
             if line_hash not in processed_lines:
                 new_lines.append((line, line_hash))
@@ -187,6 +189,7 @@ async def process_logs(processed_lines, timestamps):
     except UnicodeDecodeError as e:
         print(f"Error al decodificar el archivo: {e}")
     return processed_lines, timestamps
+
 
 
 def calculate_intermediate_timestamp(lines, line, cutoff_time):
