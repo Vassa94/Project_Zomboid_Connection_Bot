@@ -129,77 +129,104 @@ async def process_logs(processed_lines, timestamps):
     Leer y procesar las nuevas líneas del archivo de logs descargado.
     """
     try:
-        clean_old_logs(LOCAL_LOG_COPY)  # Limpiar logs locales antes de procesar
-        with open(LOCAL_LOG_COPY, 'r', encoding='utf-8') as file:  # Forzar UTF-8
+        # Limpia logs locales antes de procesar
+        clean_old_logs(LOCAL_LOG_COPY)
+
+        # Lee las líneas del archivo de logs descargado
+        with open(LOCAL_LOG_COPY, 'r', encoding='utf-8') as file:
             lines = file.readlines()
 
-        # Filtrar nuevas líneas por hash
-        new_lines = [line for line in lines if calculate_line_hash(line) not in processed_lines]
+        # Filtrar líneas no procesadas
+        new_lines = []
+        for line in lines:
+            line_hash = calculate_line_hash(line)
+            if line_hash not in processed_lines:
+                new_lines.append((line, line_hash))
+
         cutoff_time = datetime.datetime.now() - datetime.timedelta(minutes=10)
 
-        # Mantener la última marca de tiempo válida encontrada
-        last_timestamp = None
-        for i, line in enumerate(new_lines):
-            # Intentar extraer la marca de tiempo del log
+        # Procesar nuevas líneas
+        for line, line_hash in new_lines:
+            # Intentar extraer o calcular el timestamp
             log_time = None
             try:
-                # Buscar la marca de tiempo en el formato [yy-mm-dd HH:MM:SS.fff]
                 if "[" in line and "]" in line:
                     timestamp_str = line.split('[')[1].split(']')[0]
                     log_time = datetime.datetime.strptime(timestamp_str, "%y-%m-%d %H:%M:%S.%f")
-                    last_timestamp = log_time  # Actualizar la última marca de tiempo válida
                 else:
-                    # Si no hay marca de tiempo explícita, calcular un timestamp intermedio
-                    next_timestamp = None
-                    for future_line in new_lines[i + 1:]:
-                        if "[" in future_line and "]" in future_line:
-                            timestamp_str = future_line.split('[')[1].split(']')[0]
-                            next_timestamp = datetime.datetime.strptime(timestamp_str, "%y-%m-%d %H:%M:%S.%f")
-                            break
-
-                    if last_timestamp and next_timestamp:
-                        log_time = last_timestamp + (next_timestamp - last_timestamp) / 2
-                    elif last_timestamp:
-                        log_time = last_timestamp  # Usar la última marca de tiempo válida
-                    else:
-                        print(f"No se pudo calcular el timestamp para la línea: {line.strip()}")
-                        continue
+                    # Si no hay timestamp explícito, calcular un intermedio
+                    log_time = calculate_intermediate_timestamp(lines, line, cutoff_time)
             except (IndexError, ValueError):
                 print(f"Error al analizar la marca de tiempo de la línea: {line.strip()}")
                 continue
 
-            # Ignorar logs antiguos (más de 10 minutos)
+            # Ignorar logs más antiguos que 10 minutos
             if log_time < cutoff_time:
                 print(f"Línea ignorada por antigüedad: {line.strip()}")
                 continue
 
-            # Detectar líneas con conexiones de jugadores
+            # Procesar conexiones
             if "PlayerConnectionMessage\tplayerConnected" in line:
-                parts = line.split("\t")  # Dividir por tabulaciones
-                player_name = parts[-1].strip()  # Extraer el último elemento (nombre del jugador)
+                player_name = line.split("\t")[-1].strip()
                 print(f"👋 ¡{player_name} se ha conectado al servidor!")
-                line_hash = calculate_line_hash(line)
                 processed_lines.add(line_hash)
                 timestamps[line_hash] = log_time
-                save_processed_line(line_hash, timestamps)  # Guardar en el registro persistente
+                save_processed_line(line_hash, timestamps)
                 await send_discord_message(player_name, "connected")
 
-            # Detectar líneas con desconexiones de jugadores
+            # Procesar desconexiones
             elif "Disconnected player" in line:
-                parts = line.split('"')  # Dividir por comillas
-                if len(parts) > 1:
-                    player_name = parts[1].strip()  # Extraer el nombre del jugador
-                    print(f"👋 ¡{player_name} se ha desconectado del servidor!")
-                    line_hash = calculate_line_hash(line)
-                    processed_lines.add(line_hash)
-                    timestamps[line_hash] = log_time
-                    save_processed_line(line_hash, timestamps)  # Guardar en el registro persistente
-                    await send_discord_message(player_name, "disconnected")
+                player_name = line.split('"')[1].strip()
+                print(f"👋 ¡{player_name} se ha desconectado del servidor!")
+                processed_lines.add(line_hash)
+                timestamps[line_hash] = log_time
+                save_processed_line(line_hash, timestamps)
+                await send_discord_message(player_name, "disconnected")
     except FileNotFoundError:
         print("Archivo de logs no encontrado.")
     except UnicodeDecodeError as e:
         print(f"Error al decodificar el archivo: {e}")
     return processed_lines, timestamps
+
+
+def calculate_intermediate_timestamp(lines, line, cutoff_time):
+    """
+    Calcular un timestamp intermedio para una línea sin timestamp explícito.
+    """
+    previous_timestamp = None
+    next_timestamp = None
+
+    # Buscar el timestamp anterior
+    for previous_line in reversed(lines[:lines.index(line)]):
+        if "[" in previous_line and "]" in previous_line:
+            try:
+                timestamp_str = previous_line.split('[')[1].split(']')[0]
+                previous_timestamp = datetime.datetime.strptime(timestamp_str, "%y-%m-%d %H:%M:%S.%f")
+                break
+            except (IndexError, ValueError):
+                continue
+
+    # Buscar el timestamp siguiente
+    for next_line in lines[lines.index(line) + 1:]:
+        if "[" in next_line and "]" in next_line:
+            try:
+                timestamp_str = next_line.split('[')[1].split(']')[0]
+                next_timestamp = datetime.datetime.strptime(timestamp_str, "%y-%m-%d %H:%M:%S.%f")
+                break
+            except (IndexError, ValueError):
+                continue
+
+    # Calcular el promedio entre los timestamps anterior y siguiente
+    if previous_timestamp and next_timestamp:
+        return previous_timestamp + (next_timestamp - previous_timestamp) / 2
+    elif previous_timestamp:
+        return previous_timestamp
+    elif next_timestamp:
+        return next_timestamp
+    else:
+        # Si no hay timestamps válidos, usa la hora actual como fallback
+        return datetime.datetime.now()
+
 
 
 
