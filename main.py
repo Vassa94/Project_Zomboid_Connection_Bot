@@ -139,19 +139,22 @@ async def process_logs(processed_lines, timestamps):
 
         for line in new_lines:
             # Extraer la marca de tiempo del log
-            parts = line.split('>')
-            if len(parts) > 1:
-                try:
-                    timestamp_str = parts[1].split('[')[1].split(']')[0]
+            log_time = None
+            try:
+                # Buscar la marca de tiempo en el formato [yy-mm-dd HH:MM:SS.fff]
+                if "[" in line and "]" in line:
+                    timestamp_str = line.split('[')[1].split(']')[0]
                     log_time = datetime.datetime.strptime(timestamp_str, "%y-%m-%d %H:%M:%S.%f")
-                except (IndexError, ValueError):
-                    print(f"Error al analizar la marca de tiempo de la línea: {line.strip()}")
-                    continue  # Saltar líneas sin marcas de tiempo válidas
+                else:
+                    continue  # Ignorar si no se encuentra el timestamp
+            except (IndexError, ValueError):
+                print(f"Error al analizar la marca de tiempo de la línea: {line.strip()}")
+                continue  # Saltar líneas con marcas de tiempo mal formadas
 
-                # Ignorar logs antiguos
-                if log_time < cutoff_time:
-                    print(f"Línea ignorada por antigüedad: {line.strip()}")
-                    continue
+            # Ignorar logs antiguos (más de 10 minutos)
+            if log_time < cutoff_time:
+                print(f"Línea ignorada por antigüedad: {line.strip()}")
+                continue
 
             # Detectar líneas con conexiones de jugadores
             if "PlayerConnectionMessage\tplayerConnected" in line:
