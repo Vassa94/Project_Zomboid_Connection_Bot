@@ -132,8 +132,27 @@ async def process_logs(processed_lines, timestamps):
         clean_old_logs(LOCAL_LOG_COPY)  # Limpiar logs locales antes de procesar
         with open(LOCAL_LOG_COPY, 'r', encoding='utf-8') as file:  # Forzar UTF-8
             lines = file.readlines()
+
+        # Filtrar líneas nuevas por hash
         new_lines = [line for line in lines if calculate_line_hash(line) not in processed_lines]
+        cutoff_time = datetime.datetime.now() - datetime.timedelta(minutes=10)
+
         for line in new_lines:
+            # Extraer la marca de tiempo del log
+            parts = line.split('>')
+            if len(parts) > 1:
+                try:
+                    timestamp_str = parts[1].split('[')[1].split(']')[0]
+                    log_time = datetime.datetime.strptime(timestamp_str, "%y-%m-%d %H:%M:%S.%f")
+                except (IndexError, ValueError):
+                    print(f"Error al analizar la marca de tiempo de la línea: {line.strip()}")
+                    continue  # Saltar líneas sin marcas de tiempo válidas
+
+                # Ignorar logs antiguos
+                if log_time < cutoff_time:
+                    print(f"Línea ignorada por antigüedad: {line.strip()}")
+                    continue
+
             # Detectar líneas con conexiones de jugadores
             if "PlayerConnectionMessage\tplayerConnected" in line:
                 parts = line.split("\t")  # Dividir por tabulaciones
@@ -161,6 +180,7 @@ async def process_logs(processed_lines, timestamps):
     except UnicodeDecodeError as e:
         print(f"Error al decodificar el archivo: {e}")
     return processed_lines, timestamps
+
 
 def initialize_processed_logs_with_timestamps():
     """
