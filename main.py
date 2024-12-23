@@ -136,18 +136,16 @@ async def process_logs(processed_lines, timestamps):
         with open(LOCAL_LOG_COPY, 'r', encoding='utf-8') as file:
             lines = file.readlines()
 
-        # Filtrar líneas no procesadas y descartar las que comienzan con "WARN : General"
+        # Filtrar solo líneas relevantes y no procesadas
+        cutoff_time = datetime.datetime.now() - datetime.timedelta(minutes=10)
         new_lines = []
         for line in lines:
-            if line.startswith("WARN : General"):
-                continue  # Ignorar estas líneas completamente
-            line_hash = calculate_line_hash(line)
-            if line_hash not in processed_lines:
-                new_lines.append((line, line_hash))
+            if line.startswith("LOG  : Network"):  # Solo procesar líneas relevantes
+                line_hash = calculate_line_hash(line)
+                if line_hash not in processed_lines:
+                    new_lines.append((line, line_hash))
 
-        cutoff_time = datetime.datetime.now() - datetime.timedelta(minutes=10)
-
-        # Procesar nuevas líneas
+        # Procesar nuevas líneas relevantes
         for line, line_hash in new_lines:
             # Intentar extraer o calcular el timestamp
             log_time = None
@@ -156,7 +154,7 @@ async def process_logs(processed_lines, timestamps):
                     timestamp_str = line.split('[')[1].split(']')[0]
                     log_time = datetime.datetime.strptime(timestamp_str, "%y-%m-%d %H:%M:%S.%f")
                 else:
-                    # Si no hay timestamp explícito, calcular un intermedio
+                    # Si no hay timestamp explícito, calcular uno intermedio
                     log_time = calculate_intermediate_timestamp(lines, line, cutoff_time)
             except (IndexError, ValueError):
                 print(f"Error al analizar la marca de tiempo de la línea: {line.strip()}")
@@ -189,6 +187,7 @@ async def process_logs(processed_lines, timestamps):
     except UnicodeDecodeError as e:
         print(f"Error al decodificar el archivo: {e}")
     return processed_lines, timestamps
+
 
 
 
