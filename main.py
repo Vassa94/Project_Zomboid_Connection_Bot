@@ -88,31 +88,40 @@ async def process_logs():
     """
     Procesar las últimas líneas del archivo de logs para detectar conexiones y desconexiones.
     """
-    processed_hashes = load_processed_hashes()
-    new_lines = read_last_lines(LOCAL_LOG_COPY)
+    while True:
+        processed_hashes = load_processed_hashes()
+        new_lines = read_last_lines(LOCAL_LOG_COPY)
 
-    for line in new_lines:
-        if "Connected new client" in line or "Disconnected player" in line:
-            line_hash = calculate_line_hash(line)
+        for line in new_lines:
+            if "Connected new client" in line or "Disconnected player" in line:
+                line_hash = calculate_line_hash(line)
 
-            if line_hash not in processed_hashes:
-                if "Connected new client" in line:
-                    player_name = line.split("Connected new client ")[1].split(" ID")[0].strip()
-                    print(f"Detectada conexión: {player_name}")
-                    await send_discord_message(player_name, "connected")
-                elif "Disconnected player" in line:
-                    player_name = line.split("Disconnected player \"")[1].split("\"")[0].strip()
-                    print(f"Detectada desconexión: {player_name}")
-                    await send_discord_message(player_name, "disconnected")
+                if line_hash not in processed_hashes:
+                    if "Connected new client" in line:
+                        player_name = line.split("Connected new client ")[1].split(" ID")[0].strip()
+                        print(f"Detectada conexión: {player_name}")
+                        await send_discord_message(player_name, "connected")
+                    elif "Disconnected player" in line:
+                        player_name = line.split("Disconnected player \"")[1].split("\"")[0].strip()
+                        print(f"Detectada desconexión: {player_name}")
+                        await send_discord_message(player_name, "disconnected")
 
-                save_processed_hash(line_hash)
+                    save_processed_hash(line_hash)
+
+        await asyncio.sleep(10)  # Esperar 10 segundos antes de procesar nuevamente
 
 @client.event
 async def on_ready():
     print(f"Bot de Discord conectado como {client.user}")
-    while True:
-        download_logs()
-        await process_logs()
-        await asyncio.sleep(10)  # Esperar 10 segundos antes de procesar nuevamente
 
-client.run(DISCORD_TOKEN)
+async def main():
+    # Ejecutar el procesamiento de logs en paralelo
+    log_task = asyncio.create_task(process_logs())
+    await client.start(DISCORD_TOKEN)
+    await log_task
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Bot detenido manualmente.")
