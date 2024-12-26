@@ -89,6 +89,8 @@ async def process_logs():
     Procesar las últimas líneas del archivo de logs para detectar conexiones y desconexiones.
     """
     while True:
+        download_logs()  # Descargar los logs antes de procesarlos
+
         processed_hashes = load_processed_hashes()
         new_lines = read_last_lines(LOCAL_LOG_COPY)
 
